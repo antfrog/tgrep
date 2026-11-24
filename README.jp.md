@@ -3,6 +3,7 @@
 [English](README.md) · [한국어](README.kr.md) · 日本語
 
 `tgrep` は、`grep` で原文ファイルを検索し、[fzf](https://github.com/junegunn/fzf) で結果を一覧できるツールです。検索結果にカーソルを合わせると、原文と各翻訳の該当行を前後の行とあわせて確認できます。
+[Kubernetes のドキュメント](https://github.com/kubernetes/website)を翻訳しているときに、同じ用語がほかのページでどう訳されているかをまとめて調べるために作りました。
 
 ![TGREP_TARGET_LANGS=ko,jp で 'sign in' を検索し、韓国語訳と日本語訳を同じ画面で確認する様子](assets/tgrep-demo.gif)
 

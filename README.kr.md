@@ -3,6 +3,7 @@
 [English](README.md) · 한국어 · [日本語](README.jp.md)
 
 `tgrep`은 `grep`으로 원문 파일을 검색하고 [fzf](https://github.com/junegunn/fzf)로 결과를 탐색하는 도구입니다. 검색 결과에 커서를 놓으면 원문과 각 번역본에서 해당 줄과 앞뒤 문맥을 함께 볼 수 있습니다.
+[kubernetes docs](https://github.com/kubernetes/website)를 번역하면서, 해당 단어의 다른 페이지 번역문을 일괄로 찾기 위해서 만든 도구입니다.
 
 ![TGREP_TARGET_LANGS=ko,jp로 'sign in'을 검색하고 한국어와 일본어 번역을 한 화면에서 확인하는 모습](assets/tgrep-demo.gif)
 

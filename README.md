@@ -3,6 +3,7 @@
 English · [한국어](README.kr.md) · [日本語](README.jp.md)
 
 `tgrep` searches source-language files with `grep` and lets you browse the matches in [fzf](https://github.com/junegunn/fzf). Highlight a match to see the source line and the surrounding lines in each available translation.
+I built `tgrep` while translating the [Kubernetes documentation](https://github.com/kubernetes/website) so I could look up translations of the same term across multiple pages at once.
 
 ![Searching for 'sign in' with TGREP_TARGET_LANGS=ko,jp and viewing the Korean and Japanese translations together](assets/tgrep-demo.gif)
 
