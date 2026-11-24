@@ -26,6 +26,13 @@ for lang in "${(@s:,:)TARGET_LANGS_RAW}"; do
 done
 
 ORIGIN_DIR="${DOCS_DIR%/}/${ORIGIN_LANG}"
+use_git=0
+if (( $+commands[git] )) && [[ "$(git -C "$DOCS_DIR" rev-parse --is-inside-work-tree 2>/dev/null)" == true ]]; then
+  use_git=1
+fi
+
+# BSD grep uses GREP_COLOR. GNU grep also lets us clear filename and separator colors.
+export GREP_COLOR='1;31' GREP_COLORS='ms=1;31:mc=1;31:fn=:ln=:se='
 
 # Internal preview mode invoked by fzf
 if [[ "${1:-}" == "--_preview" ]]; then
@@ -38,16 +45,20 @@ if [[ "${1:-}" == "--_preview" ]]; then
 
   # Print origin snippet with query highlighted in red bold
   echo "=== ${ORIGIN_LANG:u} (${origin_file}:${line}) ==="
-  awk -v s="$start" -v e="$end" -v target="$line" '
-    NR >= s && NR <= e {
-      prefix = (NR == target) ? ">" : " "
-      printf "%s %4d | %s\n", prefix, NR, $0
-    }
-  ' "$origin_file" | rg -i --passthru --color=always --colors 'match:fg:red' --colors 'match:style:bold' -e "$query"
+  # The empty end-of-line match keeps context lines visible without coloring them.
+  awk -v s="$start" -v e="$end" 'NR > e { exit } NR >= s { print }' "$origin_file" |
+    grep -Ei --color=always -e "$query" -e '$' |
+    awk -v s="$start" -v target="$line" '{
+      n = s + NR - 1
+      printf "%s %4d | %s\n", (n == target ? ">" : " "), n, $0
+    }'
 
   # Print matching snippets for all existing target language files
   for lang in "${TARGET_LANGS[@]}"; do
     target_file="${DOCS_DIR%/}/${lang}/${rel_path}"
+    if (( use_git )) && git -C "$DOCS_DIR" check-ignore -q -- "$lang/$rel_path"; then
+      continue
+    fi
     if [[ -f "$target_file" ]]; then
       echo ""
       echo "=== ${lang:u} (${target_file}:${line}) ==="
@@ -74,31 +85,39 @@ if [[ ! -d "$ORIGIN_DIR" ]]; then
   exit 1
 fi
 
-# Collect unique origin files that have at least one target translation
-typeset -A seen_files=()
+# List paths relative to a language directory, keeping filenames NUL-delimited.
+list_files() (
+  cd -- "$1" || return 1
+  if (( use_git )); then
+    git ls-files -z --cached --others --exclude-standard -- .
+  else
+    printf '%s\0' **/*(.N)
+  fi
+)
+
+typeset -A translated_paths=()
 typeset -a origin_files=()
 
 for lang in "${TARGET_LANGS[@]}"; do
   target_dir="${DOCS_DIR%/}/${lang}"
   [[ ! -d "$target_dir" ]] && continue
 
-  while IFS= read -r -d '' target_file; do
-    rel_path="${target_file#${target_dir}/}"
-    origin_file="${ORIGIN_DIR}/${rel_path}"
-    if [[ -f "$origin_file" && -z "${seen_files[$origin_file]:-}" ]]; then
-      seen_files[$origin_file]=1
-      origin_files+=("$origin_file")
-    fi
-  done < <(rg --files -0 "$target_dir")
+  while IFS= read -r -d '' rel_path; do
+    [[ -f "$target_dir/$rel_path" ]] && translated_paths[$rel_path]=1
+  done < <(list_files "$target_dir")
 done
+
+while IFS= read -r -d '' rel_path; do
+  [[ -n "$rel_path" && "/$rel_path" != */.* && -n "${translated_paths[$rel_path]:-}" ]] || continue
+  [[ -f "$ORIGIN_DIR/$rel_path" ]] && origin_files+=("$ORIGIN_DIR/$rel_path")
+done < <(list_files "$ORIGIN_DIR")
 
 if (( ${#origin_files[@]} == 0 )); then
   echo "Error: No matching files found between '$ORIGIN_LANG' and '$TARGET_LANGS_RAW' in '$DOCS_DIR'." >&2
   exit 1
 fi
 
-rg -i --with-filename --line-number --no-heading --color=always \
-  --colors 'match:fg:red' --colors 'match:style:bold' \
+grep -EinHI --color=always \
   -e "$query" -- "${origin_files[@]}" | \
 TGREP_SCRIPT_PATH="${0:A}" \
 TGREP_QUERY="$query" \
