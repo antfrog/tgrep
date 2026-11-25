@@ -49,7 +49,7 @@ Search patterns use case-insensitive extended regular expressions (`grep -Ei`). 
 Create `~/.config/tgrep/config` to set your defaults. The file is sourced by zsh, so shell quoting and `$HOME` expansion work:
 
 ```sh
-TGREP_DOCS_DIR="$HOME/work/docs"
+TGREP_DOCS_DIR="$HOME/kubernetes/website/content"
 TGREP_ORIGIN_LANG=en
 TGREP_TARGET_LANGS=ko,ja
 ```

@@ -49,7 +49,7 @@ tgrep 'sign in'
 `~/.config/tgrep/config` に既定値を設定できます。zsh がこのファイルを読み込んで実行するので、シェルと同じように引用符や `$HOME` などの変数を使えます。
 
 ```sh
-TGREP_DOCS_DIR="$HOME/work/docs"
+TGREP_DOCS_DIR="$HOME/kubernetes/website/content"
 TGREP_ORIGIN_LANG=en
 TGREP_TARGET_LANGS=ko,ja
 ```
