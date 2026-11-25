@@ -9,8 +9,9 @@ set -euo pipefail
 DOCS_DIR="${TGREP_DOCS_DIR:-}"
 ORIGIN_LANG="${TGREP_ORIGIN_LANG:-}"
 TARGET_LANGS_RAW="${TGREP_TARGET_LANGS:-}"
+ENTER_ACTION="${TGREP_ENTER_ACTION:-}"
 typeset -A context_env=()
-if [[ "${1:-}" != "--_preview" && -f "$HOME/.config/tgrep/config" ]]; then
+if [[ "${1:-}" != --_preview && "${1:-}" != --_compare && -f "$HOME/.config/tgrep/config" ]]; then
   for key in ${(k)parameters[(I)TGREP_(BEFORE|AFTER)_LINES*]}; do
     context_env[$key]="${(P)key}"
   done
@@ -21,6 +22,11 @@ DOCS_DIR="${DOCS_DIR:-${TGREP_DOCS_DIR:-.}}"
 DOCS_DIR="${DOCS_DIR/#\~/$HOME}"
 ORIGIN_LANG="${ORIGIN_LANG:-${TGREP_ORIGIN_LANG:-en}}"
 TARGET_LANGS_RAW="${TARGET_LANGS_RAW:-${TGREP_TARGET_LANGS:-ko,ja}}"
+ENTER_ACTION="${ENTER_ACTION:-${TGREP_ENTER_ACTION:-edit}}"
+if [[ "$ENTER_ACTION" != edit && "$ENTER_ACTION" != print ]]; then
+  print -u2 -r -- "Error: TGREP_ENTER_ACTION must be 'edit' or 'print' (got '$ENTER_ACTION')."
+  exit 1
+fi
 
 # Split comma-separated target languages into an array
 typeset -a TARGET_LANGS=()
@@ -55,6 +61,51 @@ fi
 # BSD grep uses GREP_COLOR. GNU grep also lets us clear filename and separator colors.
 export GREP_COLOR='1;31' GREP_COLORS='ms=1;31:mc=1;31:fn=:ln=:se='
 
+# All views should use the same set of translations.
+has_translation() {
+  [[ -f "${DOCS_DIR%/}/$1/$2" ]] &&
+    { (( ! use_git )) || ! git -C "$DOCS_DIR" check-ignore -q -- "$1/$2"; }
+}
+
+# The parent fzf resumes at the same result when the comparison closes.
+if [[ "${1:-}" == --_compare ]]; then
+  (( $+commands[vim] )) || exit 0
+  index="$2"
+  rel_path="${3#./}"
+  line="$4"
+  lang="${TARGET_LANGS[$index]:-}"
+  if [[ -z "$lang" ]]; then
+    message="Target language $index is not configured."
+  elif ! has_translation "$lang" "$rel_path"; then
+    message="No translation available for $lang/$rel_path."
+  else
+    [[ "$line" == <-> ]] || exit 1
+    cd -- "$DOCS_DIR"
+    # Pad the shorter buffer in memory so scrolling past its end shows blank
+    # rows beside the other file. Disable writes, swap files and user config.
+    exec vim -u NONE -i NONE -n -m -O \
+      --cmd 'set nocompatible nomodeline ttimeout ttimeoutlen=80 shortmess+=F' \
+      -c 'set showtabline=2 laststatus=2 virtualedit=all
+          let &tabline = " ↑/↓  PgUp/PgDn  ·  ←/→ scroll horizontally  ·  Esc to return"' \
+      -c 'let rows = max(map(getbufinfo({"bufloaded": 1}), "v:val.linecount"))' \
+      -c 'windo call append(line("$"), repeat([""], rows - line("$")))' \
+      -c 'windo setlocal readonly nomodified nomodifiable nowrap nofoldenable number cursorline' \
+      -c 'wincmd t' -c "normal! ${line}Gzz" \
+      -c 'function! MirrorView()
+            let other = winnr() == 1 ? 2 : 1
+            call win_execute(win_getid(other), "call winrestview(" . string(winsaveview()) . ")")
+          endfunction
+          autocmd VimEnter,CursorMoved,WinScrolled * call MirrorView()' \
+      -c 'nnoremap <Left> zH
+          nnoremap <Right> zL
+          nnoremap <Esc> :qa!<CR>' \
+      -- "$ORIGIN_LANG/$rel_path" "$lang/$rel_path" </dev/tty >/dev/tty
+  fi
+  print -r -- "$message" | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+    --layout=reverse --border --margin=1,2 --header='Esc to return' >/dev/null
+  exit
+fi
+
 # Internal preview mode invoked by fzf
 if [[ "${1:-}" == "--_preview" ]]; then
   rel_path="${2#./}"
@@ -80,10 +131,7 @@ if [[ "${1:-}" == "--_preview" ]]; then
   # Print matching snippets for all existing target language files
   for lang in "${TARGET_LANGS[@]}"; do
     target_file="${DOCS_DIR%/}/${lang}/${rel_path}"
-    if (( use_git )) && git -C "$DOCS_DIR" check-ignore -q -- "$lang/$rel_path"; then
-      continue
-    fi
-    if [[ -f "$target_file" ]]; then
+    if has_translation "$lang" "$rel_path"; then
       echo ""
       echo "=== ${lang:u} (${lang}/${rel_path}:${line}) ==="
       awk -v b="${context_lines[BEFORE/$lang]}" -v a="${context_lines[AFTER/$lang]}" -v target="$line" '
@@ -144,19 +192,63 @@ if (( ${#origin_files[@]} == 0 )); then
   exit 1
 fi
 
-(
-  cd -- "${ORIGIN_DIR:a}"
-  grep -EinHI --color=always -e "$query" -- "${origin_files[@]}"
-) | \
-TGREP_SCRIPT_PATH="${0:A}" \
-TGREP_QUERY="$query" \
-TGREP_DOCS_DIR="$DOCS_DIR" \
-TGREP_ORIGIN_LANG="$ORIGIN_LANG" \
-TGREP_TARGET_LANGS="$TARGET_LANGS_RAW" \
-fzf -i --ansi --delimiter : --with-nth='{1}:{2}' \
-  --preview '"$TGREP_SCRIPT_PATH" --_preview {1} {2}' \
-  --preview-window 'up:65%:wrap' |
-while IFS= read -r match; do
-  # Keep the selected path usable from the caller's working directory.
-  printf '%s/%s\n' "$ORIGIN_DIR" "${match#./}"
+SCRIPT_PATH="${0:A}"
+pick_match() {
+  if (( $+commands[vim] )); then
+    set -- "$@" --header='F1 / F2 · compare side by side' \
+      --bind 'f1:execute("$TGREP_SCRIPT_PATH" --_compare 1 {1} {2})' \
+      --bind 'f2:execute("$TGREP_SCRIPT_PATH" --_compare 2 {1} {2})'
+  fi
+  (
+    cd -- "${ORIGIN_DIR:a}"
+    # Use separate fields so colons in filenames and matching text stay literal.
+    grep -EinHI --null -e "$query" -- "${origin_files[@]}" |
+      tr '\000' '\037' | awk -v sep=$'\037' '{
+        split_at = index($0, sep)
+        hit = substr($0, split_at + 1)
+        sub(/:/, sep, hit)
+        print substr($0, 1, split_at) hit
+      }' || {
+      rc=$?
+      # fzf can close its input as soon as the user selects a result.
+      (( rc == 141 )) || exit "$rc"
+    }
+  ) | TGREP_SCRIPT_PATH="$SCRIPT_PATH" TGREP_QUERY="$query" \
+    TGREP_DOCS_DIR="$DOCS_DIR" TGREP_ORIGIN_LANG="$ORIGIN_LANG" TGREP_TARGET_LANGS="$TARGET_LANGS_RAW" \
+    fzf -i --ansi --delimiter=$'\037' --with-nth='{1}:{2}' \
+      --preview '"$TGREP_SCRIPT_PATH" --_preview {1} {2}' \
+      --preview-window 'up:65%:wrap' "$@"
+}
+
+if [[ "$ENTER_ACTION" == print ]]; then
+  pick_match --accept-nth='{1}:{2}:{3..}' | while IFS= read -r match; do
+    printf '%s/%s\n' "$ORIGIN_DIR" "${match#./}"
+  done
+  exit
+fi
+
+selection=$(pick_match +m --accept-nth='{2}:{1}')
+line="${selection%%:*}"
+rel_path="${selection#*:}"
+[[ "$line" == <-> && -n "$rel_path" ]] || exit 1
+for lang in "${TARGET_LANGS[@]}"; do
+  has_translation "$lang" "$rel_path" || continue
+  editor="${EDITOR:-vi}"
+  if [[ -f "$editor" && -x "$editor" ]]; then
+    editor_args=("$editor")
+  else
+    # Respect quoted editor options without evaluating shell code.
+    editor_args=( "${(@Q)${(z)editor}}" )
+  fi
+  target_file="${DOCS_DIR:a}/$lang/$rel_path"
+  case "${editor_args[1]:t}" in
+    vi|vim|gvim|nvim|nano|emacs|emacsclient)
+      exec "${editor_args[@]}" "+$line" "$target_file" ;;
+    code|code-insiders|codium|cursor)
+      exec "${editor_args[@]}" --goto "${target_file}:${line}:1" ;;
+    *)
+      exec "${editor_args[@]}" "$target_file" ;;
+  esac
 done
+print -u2 -r -- "Error: No translation available for '$rel_path' in '$TARGET_LANGS_RAW'."
+exit 1
