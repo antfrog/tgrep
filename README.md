@@ -44,6 +44,8 @@ Use Up and Down to select a result. The preview shows that line in the source an
 
 Search patterns are case-insensitive extended regular expressions. Only source files with at least one translation are searched. Hidden paths and untracked files covered by Git ignore rules are skipped.
 
+Search skips code blocks fenced with three or more backticks. Matches after a block keep their original line numbers.
+
 ## Compare side by side
 
 Press **`F1`** on a result to open the source on the left and the first target language on the right. **`F2`** opens the second target language. With `TGREP_TARGET_LANGS=ko,ja`, `F1` opens Korean and `F2` opens Japanese. These shortcuts require `vim` on your `PATH`.
