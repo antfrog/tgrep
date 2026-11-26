@@ -35,6 +35,10 @@ for lang in "${(@s:,:)TARGET_LANGS_RAW}"; do
   [[ -n "$lang" ]] && TARGET_LANGS+=("$lang")
 done
 
+is_nonnegative_integer() {
+  [[ -n "$1" && "$1" != *[!0-9]* ]]
+}
+
 # Resolve each language's preview settings before launching fzf.
 typeset -A context_lines=()
 for lang in "$ORIGIN_LANG" "${TARGET_LANGS[@]}"; do
@@ -43,7 +47,7 @@ for lang in "$ORIGIN_LANG" "${TARGET_LANGS[@]}"; do
     key="${base}_${${lang:u}//[^A-Z0-9_]/_}"
     fallback="${context_env[$base]:-${${(P)base}:-3}}"
     count="${context_env[$key]:-${${(P)key}:-$fallback}}"
-    if [[ "$count" != <-> ]]; then
+    if ! is_nonnegative_integer "$count"; then
       print -u2 -r -- "Error: $base and $key must be nonnegative integers (got '$count' for '$lang')."
       exit 1
     fi
@@ -79,7 +83,7 @@ if [[ "${1:-}" == --_compare ]]; then
   elif ! has_translation "$lang" "$rel_path"; then
     message="No translation available for $lang/$rel_path."
   else
-    [[ "$line" == <-> ]] || exit 1
+    is_nonnegative_integer "$line" || exit 1
     cd -- "$DOCS_DIR"
     # Pad the shorter buffer in memory so scrolling past its end shows blank
     # rows beside the other file. Disable writes, swap files and user config.
@@ -230,7 +234,7 @@ fi
 selection=$(pick_match +m --accept-nth='{2}:{1}')
 line="${selection%%:*}"
 rel_path="${selection#*:}"
-[[ "$line" == <-> && -n "$rel_path" ]] || exit 1
+is_nonnegative_integer "$line" && [[ -n "$rel_path" ]] || exit 1
 for lang in "${TARGET_LANGS[@]}"; do
   has_translation "$lang" "$rel_path" || continue
   editor="${EDITOR:-vi}"
