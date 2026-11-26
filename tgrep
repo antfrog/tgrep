@@ -86,22 +86,50 @@ if [[ "${1:-}" == --_compare ]]; then
     is_nonnegative_integer "$line" || exit 1
     cd -- "$DOCS_DIR"
     # Pad the shorter buffer in memory so scrolling past its end shows blank
-    # rows beside the other file. Disable writes, swap files and user config.
+    # rows beside the other file. PadWrap adds spaces to align wrapped rows.
     exec vim -u NONE -i NONE -n -m -O \
       --cmd 'set nocompatible nomodeline ttimeout ttimeoutlen=80 shortmess+=F' \
-      -c 'set showtabline=2 laststatus=2 virtualedit=all
-          let &tabline = " ↑/↓  PgUp/PgDn  ·  ←/→ scroll horizontally  ·  Esc to return"' \
+      -c 'set showtabline=2 laststatus=2 undolevels=-1
+          let &tabline = " ↑/↓  PgUp/PgDn  ·  Esc to return"' \
       -c 'let rows = max(map(getbufinfo({"bufloaded": 1}), "v:val.linecount"))' \
       -c 'windo call append(line("$"), repeat([""], rows - line("$")))' \
-      -c 'windo setlocal readonly nomodified nomodifiable nowrap nofoldenable number cursorline' \
+      -c 'windo setlocal wrap nolinebreak nofoldenable number cursorline | let b:source_lines = getline(1, "$")' \
+      -c 'function! MeasureWrap()
+            let info = getwininfo(win_getid())[0]
+            let w:columns = max([1, info.width - info.textoff])
+            let w:cells = map(copy(b:source_lines), "strdisplaywidth(v:val)")
+            let w:continuations = map(copy(w:cells), "(max([1, v:val]) - 1) / w:columns")
+          endfunction
+          function! PadWrap()
+            let other = getwinvar(3 - winnr(), "continuations")
+            let lines = copy(b:source_lines)
+            for i in range(len(lines))
+              if other[i] > w:continuations[i]
+                let lines[i] .= repeat(" ", other[i] * w:columns + 1 - w:cells[i])
+              endif
+            endfor
+            setlocal modifiable noreadonly
+            call setline(1, lines)
+            setlocal nomodified nomodifiable readonly
+          endfunction
+          function! AlignWrap()
+            for pane in [1, 2]
+              call win_execute(win_getid(pane), "call MeasureWrap()")
+            endfor
+            for pane in [1, 2]
+              call win_execute(win_getid(pane), "call PadWrap()")
+            endfor
+          endfunction
+          call AlignWrap()
+          autocmd VimResized * call AlignWrap() | call MirrorView()' \
       -c 'wincmd t' -c "normal! ${line}Gzz" \
       -c 'function! MirrorView()
             let other = winnr() == 1 ? 2 : 1
             call win_execute(win_getid(other), "call winrestview(" . string(winsaveview()) . ")")
           endfunction
           autocmd VimEnter,CursorMoved,WinScrolled * call MirrorView()' \
-      -c 'nnoremap <Left> zH
-          nnoremap <Right> zL
+      -c 'nnoremap <Up> gk
+          nnoremap <Down> gj
           nnoremap <Esc> :qa!<CR>' \
       -- "$ORIGIN_LANG/$rel_path" "$lang/$rel_path" </dev/tty >/dev/tty
   fi
