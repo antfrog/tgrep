@@ -52,7 +52,7 @@ Press **`F1`** on a result to open the source on the left and the first target l
 
 ![Vim showing line 6 of the English source beside line 6 of the Korean translation](assets/tgrep-compare.png)
 
-- Scroll both panes with Up, Down, Page Up or Page Down. Use Left and Right to read long lines.
+- Long lines wrap to fit each pane. Scroll both panes one screen line at a time with Up and Down, or a page at a time with Page Up and Page Down.
 - Press `Esc` to return to the same search result.
 
 The panes align by line number. Adding or removing lines in a translation can put corresponding passages on different rows.
