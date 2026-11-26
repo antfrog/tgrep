@@ -92,6 +92,36 @@ if [[ "${1:-}" == --_compare ]]; then
       -c 'set showtabline=2 laststatus=2 undolevels=-1' \
       -c 'let rows = max(map(getbufinfo({"bufloaded": 1}), "v:val.linecount"))' \
       -c 'windo setlocal wrap nolinebreak nofoldenable number cursorline | let b:source_lines = getline(1, "$")' \
+      -c 'function! HighlightQuery()
+            " Match in the buffer encoding, preserving file line endings for grep anchors.
+            let text = copy(b:source_lines)
+            if &endofline | call add(text, "") | endif
+            if &fileformat == "dos"
+              call map(text, {i, s -> i < len(text) - 1 ? s . "\r" : s})
+            endif
+            let bom = &bomb ? nr2char(0xfeff) : ""
+            let text[0] = bom . text[0]
+            let hits = systemlist("grep -EiInob --color=never -e \"$TGREP_QUERY\"", text)
+            if v:shell_error | return | endif
+            let positions = []
+            for hit in hits
+              let fields = matchlist(hit, "\\v^(\\d+):(\\d+):(.*)$")
+              let lnum = str2nr(fields[1])
+              " grep offsets start at zero; Vim columns and line2byte() start at one.
+              let col = str2nr(fields[2]) - strlen(bom) - line2byte(lnum) + 2
+              let endcol = min([col + strlen(fields[3]), strlen(b:source_lines[lnum - 1]) + 1])
+              let col = max([1, col])
+              if col < endcol
+                call add(positions, [lnum, col, endcol - col])
+              endif
+            endfor
+            " Older Vim versions accept up to eight positions per match.
+            for i in range(0, len(positions) - 1, 8)
+              call matchaddpos("TgrepMatch", positions[i : i + 7])
+            endfor
+          endfunction
+          highlight TgrepMatch term=reverse cterm=bold ctermfg=Black ctermbg=Yellow gui=bold guifg=Black guibg=Gold
+          windo call HighlightQuery()' \
       -c 'function! MeasureWrap()
             let &l:numberwidth = max([4, strlen(g:rows) + 1])
             let info = getwininfo(win_getid())[0]
