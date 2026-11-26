@@ -50,6 +50,8 @@ Search skips code blocks fenced with three or more backticks. Matches after a bl
 
 Press **`F1`** on a result to open the source on the left and the first target language on the right. **`F2`** opens the second target language. With `TGREP_TARGET_LANGS=ko,ja`, `F1` opens Korean and `F2` opens Japanese. These shortcuts require `vim` on your `PATH`.
 
+When the comparison opens, matching text is highlighted in both panes using the original search pattern.
+
 ![Vim showing line 6 of the English source beside line 6 of the Korean translation](assets/tgrep-compare.png)
 
 - The panes scroll together by default. Long lines wrap to fit. Use Up and Down to move one screen line, or Page Up and Page Down to move one page.
