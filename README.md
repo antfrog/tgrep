@@ -52,10 +52,11 @@ Press **`F1`** on a result to open the source on the left and the first target l
 
 ![Vim showing line 6 of the English source beside line 6 of the Korean translation](assets/tgrep-compare.png)
 
-- Long lines wrap to fit each pane. Scroll both panes one screen line at a time with Up and Down, or a page at a time with Page Up and Page Down.
+- The panes scroll together by default. Long lines wrap to fit. Use Up and Down to move one screen line, or Page Up and Page Down to move one page.
+- To scroll independently, press `s`, then select the source with Left or the translation with Right. Press `s` again to link both panes at the active pane’s position.
 - Press `Esc` to return to the same search result.
 
-The panes align by line number. Adding or removing lines in a translation can put corresponding passages on different rows.
+Linked scrolling aligns the panes by line number. Adding or removing lines in a translation can put corresponding passages on different rows.
 
 ## Edit a translation
 
