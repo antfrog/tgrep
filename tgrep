@@ -205,13 +205,27 @@ pick_match() {
   fi
   (
     cd -- "${ORIGIN_DIR:a}"
-    # Use separate fields so colons in filenames and matching text stay literal.
-    grep -EinHI --null -e "$query" -- "${origin_files[@]}" |
-      tr '\000' '\037' | awk -v sep=$'\037' '{
+    # Pass fence lines through grep even when the query only matches their contents.
+    local fence_pattern='^ ? ? ?```+[^`]*$'
+    grep -EinHI --null -e "$query" -e "$fence_pattern" -- "${origin_files[@]}" |
+      tr '\000' '\037' | awk -v sep=$'\037' -v fence_pattern="$fence_pattern" '{
         split_at = index($0, sep)
+        file = substr($0, 1, split_at - 1)
+        if (file != last_file) {
+          fence_width = 0
+          last_file = file
+        }
         hit = substr($0, split_at + 1)
-        sub(/:/, sep, hit)
-        print substr($0, 1, split_at) hit
+        colon = index(hit, ":")
+        content = substr(hit, colon + 1)
+        if (content ~ fence_pattern) {
+          sub(/^ */, "", content)
+          match(content, /^`+/)
+          if (!fence_width) fence_width = RLENGTH
+          else if (RLENGTH >= fence_width && substr(content, RLENGTH + 1) ~ /^[ \t]*\r?$/) fence_width = 0
+          next
+        }
+        if (!fence_width) print file sep substr(hit, 1, colon - 1) sep content
       }' || {
       rc=$?
       # fzf can close its input as soon as the user selects a result.
